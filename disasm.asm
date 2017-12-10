@@ -7,7 +7,7 @@
 	; kodas		db ?
 	pradiniai1  					db '.model small',10,13,'.org 100h',10,13,'$'
 	pradzia							db '.code', 10,13,'$'
-	tarpas							db 20,'$'
+	tarpas							db 20h,'$'
 	NewLine							db 13,10, '$'
 	neatpazinta 					db 'Neatpazinta'
 	duom_deskriptorius 				dw ?
@@ -30,10 +30,10 @@
 	s_CS							db 'cs$'
 	; c_REP							db 'REP$'
 	; c_REPNE     					db 'REPNE$'
-	op_pavadinimas 					db ?
+	op_pavadinimas 					db 0,0,0,0,0,'$'
 	formato_nr    					db ?
 	perkelktiek 					dw 0
-	prefikso_seg 					dw ?
+	prefikso_seg 					db ?
 	reprep							dw 0
 	prefiksas_rastas 				db 0
 	bitai							dw 8 dup (?)       ;cia desiu 2vejetaine baito forma
@@ -51,7 +51,7 @@
 	lentele							dw 'a','l','a','x','b','x','+','s','i',' ','c','l','c','x','b','x','+','d','i',' ','d','l','d','x','b','p','+','s','i',' ','b','l','b','x','b','p','+','d','i',' ','a','h','s','p','s','i','?','?','?',' ','c','h','b','p','d','i','?','?','?',' ','d','h','s','i','-','-','?','?','?',' ','b','h','d','i','b','x','?','?','?'
 	nr_lentelej						dw 0
 	reg_spausdinimui				dw 0,0,0,0
-	kablelis						dw 2Ch,20h,'$'
+	kablelis						db 2Ch,20h,'$'
 	mod_desimtainis					dw 0
 	poslinkio_dydis					dw 0
 	sr_baitu_suma					dw 0
@@ -243,6 +243,7 @@ antra:
 	mov dx, offset op_pavadinimas
 	mov cx, OPK_pavadinimo_ilgis
 	call Rasymas
+	jc klaida1
 	call space
 	cmp bitas_w, 1
 	je ww1
@@ -251,14 +252,18 @@ ww1:
 	mov poslinkio_dydis, 2
 	call poslinkio_spausdinimas
 	jmp ciklas
+klaida1:
+	jmp klaida
 ;------------------------------------
 ;sestas formatas kodasSRkodas
 ;------------------------------------
 sesta:
-	mov bx, offset op_pavadinimas
+	mov dx, offset op_pavadinimas
 	mov cx, OPK_pavadinimo_ilgis
 	call Rasymas
-	call space
+	mov dx, offset tarpas
+	mov cx, 1
+	call Rasymas
 	call baitas_i_bitus
 	mov si, 4
 	mov dx, [bitai+si] 
@@ -276,16 +281,16 @@ sesta:
 	cmp sr_baitu_suma, 3
 	je ds_segm
 es_segm:
-	mov bx, offset s_ES
+	mov dx, offset s_ES
 	jmp spaus
 cs_segm:
-	mov bx, offset s_CS
+	mov dx, offset s_CS
 	jmp spaus
 ss_segm:
-	mov bx, offset s_SS
+	mov dx, offset s_SS
 	jmp spaus
 ds_segm:
-	mov bx, offset s_DS
+	mov dx, offset s_DS
 	jmp spaus
 spaus:
 	; mov bx, offset op_pavadinimas
@@ -293,22 +298,29 @@ spaus:
 	; call Rasymas
 	; call space
 	; mov bx, offset prefikso_seg
-	mov cx, 1
+	mov cx, 2
 	call Rasymas
 	call naujaeilute
-jmp ciklas		
+jmp ciklas	
+klaida2:
+		jmp klaida
+;------------------------------------
+;pavadinimo isvalymas
+;------------------------------------
+; proc op_pav_isvalymas
+	
 ;-------------------------------------
 ;kai d bitas =0, saltinis reg, rezultatas rm
 ;----------------------------------------
 proc reg_i_rm
 	push dx
 	call rm_sutvarkymas
-	mov bx, offset kablelis
+	mov dx, offset kablelis
 	mov cx, 2
 	call Rasymas
 	cmp prefiksas_rastas, 1				;spausdinu prefikso segmenta, po jo seks rm
 	jne toliau
-	mov bx, offset prefikso_seg
+	mov dx, offset prefikso_seg
 	mov cx, 2                       ;;;;;;;;;;;;;;;;;;;;;
 	call Rasymas
 toliau:
@@ -323,12 +335,12 @@ reg_i_rm endp
 proc rm_i_reg
 	push dx
 	call reg_sutvarkymas				;atspausdinu reg
-	mov bx, offset kablelis
+	mov dx, offset kablelis
 	mov cx, 2
 	call Rasymas
 	cmp prefiksas_rastas, 1				;spausdinu prefikso segmenta, po jo seks rm
 	jne toliauu
-	mov bx, offset prefikso_seg
+	mov dx, offset prefikso_seg
 	mov cx, 2
 	call Rasymas
 toliauu:
@@ -355,7 +367,7 @@ nelygu:
 	inc di
 	mov dx, [lentele+si]
 	mov [reg_spausdinimui+di], dx
-	mov bx, offset reg_spausdinimui
+	mov dx, offset reg_spausdinimui
 	mov cx, 2
 	call Rasymas
 	; mov si, 2s
@@ -366,59 +378,59 @@ reg_sutvarkymas endp
 ;rm isnagrinejimas ir spausdinimas
 ;---------------------------------------
 proc rm_sutvarkymas  
-	mov bx, [baito_rm] 
-	call skaiciavimas      ;turiu nr_lentelej kuris rodo i pati pirma elementa pagal rm, dabar reik, kad pridetu pagal mod
-	call mod_pavertimas_desimtainiu
-	cmp mod_desimtainis, 3
-	je modtrys
-	add nr_lentelej, 4                        ;cia bus mod 00 arba 01
-reikalinga:
-	mov si, nr_lentelej
-	xor di,di
-ciklelio:
-	mov bx, [lentele+si]
-	cmp bx, 20h
-	je nuskaityta 
-	mov [reg_spausdinimui+di], bx
-	inc di
-	inc si
-	jmp ciklelio
-nuskaityta:
-	cmp [reg_spausdinimui], 2Dh     ;ziuriu ar ne tiesioginis adresas, nes jis uzpildytas ---
-	je tiesioginisadresas
-	inc di
-	mov bx, offset reg_spausdinimui
-	mov cx, di
-	call Rasymas
-	cmp mod_desimtainis, 3
-	je theend
-	cmp mod_desimtainis, 1
-	je modvienas
-	cmp mod_desimtainis, 2
-	je moddu
-	jmp theend
-modvienas:
-	mov poslinkio_dydis, 1
-	call poslinkio_spausdinimas
-	jmp theend
-moddu:
-	mov poslinkio_dydis, 2
-	call poslinkio_spausdinimas
-	jmp theend
-modtrys:
-	cmp bitas_w, 1
-	je w1
-	jmp reikalinga
-w1:
-	add nr_lentelej,2
-	jmp reikalinga
-theend:
+	; mov bx, [baito_rm] 
+	; call skaiciavimas      ;turiu nr_lentelej kuris rodo i pati pirma elementa pagal rm, dabar reik, kad pridetu pagal mod
+	; call mod_pavertimas_desimtainiu
+	; cmp mod_desimtainis, 3
+	; je modtrys
+	; add nr_lentelej, 4                        ;cia bus mod 00 arba 01
+; reikalinga:
+	; mov si, nr_lentelej
+	; xor di,di
+; ciklelio:
+	; mov bx, [lentele+si]
+	; cmp bx, 20h
+	; je nuskaityta 
+	; mov [reg_spausdinimui+di], bx
+	; inc di
+	; inc si
+	; jmp ciklelio
+; nuskaityta:
+	; cmp [reg_spausdinimui], 2Dh     ;ziuriu ar ne tiesioginis adresas, nes jis uzpildytas ---
+	; je tiesioginisadresas
+	; inc di
+	; mov dx, offset reg_spausdinimui
+	; mov cx, di
+	; call Rasymas
+	; cmp mod_desimtainis, 3
+	; je theend
+	; cmp mod_desimtainis, 1
+	; je modvienas
+	; cmp mod_desimtainis, 2
+	; je moddu
+	; jmp theend
+; modvienas:
+	; mov poslinkio_dydis, 1
+	; call poslinkio_spausdinimas
+	; jmp theend
+; moddu:
+	; mov poslinkio_dydis, 2
+	; call poslinkio_spausdinimas
+	; jmp theend
+; modtrys:
+	; cmp bitas_w, 1
+	; je w1
+	; jmp reikalinga
+; w1:
+	; add nr_lentelej,2
+	; jmp reikalinga
+; theend:
 	ret
 rm_sutvarkymas endp
-tiesioginisadresas:
-	mov poslinkio_dydis, 2
-	call poslinkio_spausdinimas
-	jmp theend
+; tiesioginisadresas:
+	; mov poslinkio_dydis, 2
+	; call poslinkio_spausdinimas
+	; jmp theend
 ;--------------------------------------
 ;poslinkis
 ;---------------------------------------
@@ -428,17 +440,17 @@ push bx
 	cmp poslinkio_dydis, 1
 	jne baitu2poslinkis
 	call ikelimas
-	mov bx, offset komanda
+	mov dx, offset komanda
 	mov cx, 1
 	jmp endas
 baitu2poslinkis:
 	inc nr 
 	call ikelimas
-	mov bx, offset komanda
+	mov dx, offset komanda
 	mov cx,1
 	dec nr
 	call ikelimas
-	mov bx, offset komanda
+	mov dx, offset komanda
 	mov cx,1
 	inc nr
 	inc nr
@@ -571,7 +583,7 @@ tikrinuOPK proc
    int 21h
    push ax    ;ax saugo failo deskr nr
    jc klaidaa
-   add kiek_perkelt, 0Ch
+   add kiek_perkelt, 0Ch    ;0ch
    mov ah, 03Fh
    pop bx
    mov dx, offset OPK    ;dx-skaitymo buferio adresas
@@ -619,7 +631,7 @@ pav:
 	inc si
 	jmp pav
 fo:
-	inc di
+	; inc di
 	mov [op_pavadinimas+di], '$'
 	inc si
 	mov bl, [OPK+si]
@@ -676,16 +688,20 @@ proc ar_prefiksas
 nerastas:
 	jmp next
 es_seg:
-	mov prefikso_seg, 'es'
+	mov dl, s_ES
+	mov prefikso_seg, dl
 	jmp skait
 cs_seg:
-	mov prefikso_seg, 'cs'
+	mov dl, s_CS
+	mov prefikso_seg, dl
 	jmp skait
 ss_seg:
-	mov prefikso_seg, 'ss'
+	mov dl, s_SS
+	mov prefikso_seg, dl
 	jmp skait
 ds_seg:
-	mov prefikso_seg, 'ds'
+	mov dl, s_DS
+	mov prefikso_seg, dl
 	jmp skait
 skait:
 	mov prefiksas_rastas, 1        ;JEI REIKSME 1, tai kai spausdinsiu patikrinsiu ar buvo toks ir pridesiu prie reg arba r/m
