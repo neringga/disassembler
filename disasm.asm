@@ -18,19 +18,10 @@ kiek_perkelt                     dw ?
 kokio_ilgio                        dw 0
 r_AX                             db 'ax$'
 r_AL							db 'al$'
-r_CX                             db 'cx$'
-r_DX                             db 'dx$'
-r_BX                             db 'bx$'
-r_SP                             db 'sp$'
-r_BP                             db 'bp$'
-r_SI                             db 'si$'
-r_DI                             db 'di$'
 s_ES                            db 'es$'
 s_SS                            db 'ss$'
 s_DS                            db 'ds$'
 s_CS                            db 'cs$'
-; c_REP                            db 'REP$'
-; c_REPNE                         db 'REPNE$'
 op_pavadinimas                     db 0,0,0,0,0,'$'
 formato_nr                        db ?
 perkelktiek                     dw 0
@@ -61,6 +52,15 @@ mano_si                            dw ?
 mano_di                            dw ?
 poslinkis							dw 0
 sesioliktainis						db 'h','$'
+bruksniukai						db 'ADD OR  ADC SBB AND SUB XOR CMP','$'
+reg_desimtainis					db 0
+k_DEC							db 'DEC', '$'
+k_INC							db 'INC', '$'
+ip_zenklai						db ':', ' ', '$'
+ip  dw 0
+ip_buff db 0,0,0,0,'$'
+isplestas dw 00FFh
+jmpu_ip	dw 0, '$'
 .code
 start:
 mov dx, @data
@@ -70,12 +70,13 @@ call parametru_skaitymas
 call failo_atidarymas
 call rez_sukurimas_atidarymas
 call skaitymas   ;;;;;gale tada cj reik rasyt perkelima
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;SUTVARKYT LENTELES NR
 mov dx, offset pradiniai
 mov cx, 80d
 call Rasymas
 ciklas:
+mov ax, ip
+call regoutip
+mov prefiksas_rastas, 0
 call ikelimas
 inc nr
 mov dx, kiek_nuskaite
@@ -96,11 +97,12 @@ jmp ciklas
 ;komandos ikelimas is kodu buferio
 ;-------------------------------------------------
 proc ikelimas
-push bx
+; push bx
 mov si, nr
 mov bh, [duomenu_buferis+si]
 mov komanda, bh
-pop bx
+inc ip
+; pop bx
 ret
 ikelimas endp
 ;--------------------------------------------
@@ -120,12 +122,12 @@ jmp trecia
 ; jmp penkta
 six:
 jmp sesta
-; seven:
-; jmp septinta
-; eight:
-; jmp astunta
-; nine:
-; jmp devinta
+seven:
+jmp septinta
+eight:
+jmp astunta
+nine:
+jmp devinta
 
 lyginimas:
 cmp komandos_nr, '1'
@@ -134,7 +136,7 @@ cmp komandos_nr, '2'
 je two
 cmp komandos_nr, '3'
 je three
-; cmp komandos_nr, 4
+; cmp komandos_nr, '4'
 ; je four
 ; cmp komandos_nr, 5
 ; je five
@@ -144,8 +146,10 @@ cmp komandos_nr, '7'
 je seven
 cmp komandos_nr, '8'
 je eight
-; cmp komandos_nr, 9
-; je nine
+cmp komandos_nr, '9'
+je nine
+cmp komandos_nr, 'a'
+je aaaa
 ; cmp komandos_nr, 'b'
 ; je bb
 cmp komandos_nr, 'c'
@@ -162,31 +166,14 @@ cmp komandos_nr, 'j'
 je jj
 cmp komandos_nr, 'k'
 je kk
-; cmp komandos_nr, 'm'
-; je mm
+cmp komandos_nr, 'm'
+je mm
 cmp komandos_nr, 'l'
 je ll
 jmp komanda_buvo_neatpazinta              ;jeigu neatitinka nei vieno firmato, buvo neatpazinta komanda
 
-; one:
-; jmp pirma
-; two:
-; jmp antra
-; three:
-; jmp trecia
-; four:
-; jmp ketvirta
-; five:
-; jmp penkta
-; six:
-; jmp sesta
-seven:
-jmp septinta
-eight:
-jmp astunta
-; nine:
-; jmp devinta
-
+aaaa:
+jmp desimta
 ; bb:
 ; jmp vienuolika
 cc:
@@ -205,15 +192,136 @@ kk:
 jmp astuon
 ll:
 jmp devyniolikta
-
-; mm:
-; jmp dvid
+mm:
+jmp dvid
 
 
 ret
 
 tvarkymas endp
 
+;---------------------------------------
+;ketvirtas formatas (INC arba DEC)
+;-----------------------------------------
+; ketvirta:
+	; call baitas_i_bitus
+	; call dwbitai
+	; call ikelimas
+	; call modregrm
+	; call reg_pavertimas_desimtainiu
+	; cmp reg_desimtainis, 1
+	; jne komdec
+	; mov dx, offset k_INC
+; ikelk:
+	; mov cx, 3
+	; call Rasymas
+	
+	
+	
+; komdec:
+	; mov dx, offset k_DEC
+	; jmp ikelk
+;-------------------------------------------
+;devintas formatas (kodasSW mod---r/m [poslinkis] bojb [bovb])
+;-------------------------------------------
+devinta:
+	call baitas_i_bitus
+	call dwbitai    ;d bite bus s
+	call ikelimas
+	inc nr
+	call modregrm
+	call reg_pavertimas_desimtainiu
+	mov al, 4
+	mul reg_desimtainis
+	mov cx, ax
+	mov si, offset bruksniukai
+cik:
+	inc si
+	loop cik
+	mov di, offset op_pavadinimas
+	mov bh, byte ptr ds:[si]
+	mov byte ptr ds:[di], bh
+	inc si
+	inc di
+	mov bh, byte ptr ds:[si]
+	mov byte ptr ds:[di], bh
+	inc si
+	inc di
+	mov bh, byte ptr ds:[si]
+	mov byte ptr ds:[di], bh
+	inc di
+	mov byte ptr ds:[di], '$'
+	
+	mov dx, offset op_pavadinimas
+	mov cx, 3
+	call Rasymas
+	call space
+	call mod_pavertimas_desimtainiu
+	cmp mod_desimtainis, 1
+	jne dviejubaitup
+	mov poslinkio_dydis, 1
+poslinkel:
+	call poslinkio_spausdinimas
+	mov dx, offset kablelis
+	mov cx, 2
+	call Rasymas
+	cmp bitas_d, 1
+	jne nedviejubaitup
+	mov poslinkio_dydis, 2
+pos:
+	call poslinkio_spausdinimas
+	call naujaeilute
+	jmp ciklas
+dviejubaitup:
+	mov poslinkio_dydis, 2
+	jmp poslinkel
+nedviejubaitup:
+	mov poslinkio_dydis, 1
+	jmp pos	
+	
+;------------------------------------------
+;desimtas formatas (cmp ax(al), b.op)
+;------------------------------------------
+desimta:
+	mov dx, offset op_pavadinimas
+	mov cx, OPK_pavadinimo_ilgis
+	call Rasymas
+	call space
+	call baitas_i_bitus
+	call dwbitai
+	cmp bitas_w, 1
+	jne busal
+	mov dx, offset r_AX
+ras:
+	mov cx, 2
+	call Rasymas
+	
+	mov dx, offset kablelis
+	mov cx, 2
+	call Rasymas
+	mov poslinkio_dydis, 2
+	call poslinkio_spausdinimas
+	mov dx, offset sesioliktainis
+	mov cx, 1
+	call Rasymas
+	call naujaeilute
+	jmp ciklas
+busal:
+	mov dx, offset r_AL
+	jmp ras
+	
+;--------------------------------------------
+;dvid formatas (kodas pjb pvb)
+;--------------------------------------------
+dvid:
+	mov dx, offset op_pavadinimas
+	mov cx, OPK_pavadinimo_ilgis
+	call Rasymas
+	call space
+	mov poslinkio_dydis, 2
+	call poslinkio_spausdinimas
+	call naujaeilute
+	jmp ciklas
 ;--------------------------------------------
 ;devyniolikas formatas
 ;-------------------------------------------
@@ -333,14 +441,24 @@ keturiolikta:
 	mov dx, offset kablelis
 	mov cx, 2
 	call Rasymas
-	mov poslinkio_dydis, 1
+	cmp bitas_w, 1
+	jne vienas
+	mov poslinkio_dydis, 2
+icia:
 	call poslinkio_spausdinimas
 	mov dx, offset sesioliktainis
 	mov cx, 1
 	call Rasymas
 	call naujaeilute
+	; cmp bitas_w, 1
+	; je praleisti
+	; inc nr
 	jmp ciklas
-
+; praleisti:
+vienas:
+	mov poslinkio_dydis, 1
+	jmp icia
+	
 ;------------------------------------------
 ;dvylikta
 ;------------------------------------------
@@ -366,19 +484,83 @@ dvylikta:
 	inc nr
 	call naujaeilute
 	jmp ciklas
+	
 ;-------------------------------------------
-;astuntas formatas 8
+;pletimas pgal zenkla
 ;-------------------------------------------
-astunta:
+proc pletimas_pagal_zenkla
+	xor dx,dx
+	cmp bitai, 1
+	jne pletimas0
+	mov ax, 100h
+	mul isplestas
+	mov isplestas, ax
+	jmp abiem
+pletimas0:
+	mov isplestas, 0
+abiem:
+	mov al, 1
+	mul komanda
+	add isplestas, ax
+	ret
+pletimas_pagal_zenkla endp
+;-------------------------------------------
+;astuntas formatas 8 (zymes)
+;-------------------------------------------
+astunta:                                          ;blogai spausdina
 	mov dx, offset op_pavadinimas
 	mov cx, OPK_pavadinimo_ilgis
 	call Rasymas
+	call space
 	mov poslinkio_dydis, 1
-	call poslinkio_spausdinimas
+	call ikelimas
+	inc nr
+	call baitas_i_bitus
+	call pletimas_pagal_zenkla
+	mov ax,ip
+	mov jmpu_ip, ax
+	add jmpu_ip, 0100h
+	mov ax, isplestas
+	add jmpu_ip, ax
+	; mov dx, jmpu_ip ;;;;;;;;;;;sito nereik siaip
+	mov cx, 4
+	mov ax, 1000h
+ciklelis:	
+	xor dx,dx
+	mov bx, ax
+	mov ax, jmpu_ip
+	div bx   ;ah turiu liekana = mano paskutinis skaiciavimas
+	
+	cmp ax, 9
+	jbe skaicius1  ;kitu atveju bus raide
+	mov jmpu_ip, dx
+	add jmpu_ip, 31h
+spausd:
+	push cx
+	push bx
+	mov dx, offset jmpu_ip
+	mov cx, 1
+	call Rasymas
+	pop bx
+	pop cx
+	
+	xor dx,dx
+	mov ax,bx
+	mov bx, 10h
+	div bx
+	
+	; mov bx, ax
+	loop ciklelis
+	
 	call naujaeilute
 	jmp ciklas
+	
+skaicius1:
+	mov jmpu_ip, ax
+	add jmpu_ip, 30h
+	jmp spausd
 ;-----------------------------------------------
-;sept formatas j
+;sept formatas (INT'eruptai)
 ;-----------------------------------------------
 sept:
 	mov dx, offset op_pavadinimas
@@ -387,6 +569,9 @@ sept:
 	; call space
 	mov poslinkio_dydis, 1
 	call poslinkio_spausdinimas
+	mov dx, offset sesioliktainis
+	mov cx, 1
+	call Rasymas
 	call naujaeilute
 	jmp ciklas
 ;----------------------------------------------------------------
@@ -420,7 +605,7 @@ call dwbitai
 mov dx, offset op_pavadinimas
 mov cx, OPK_pavadinimo_ilgis
 call Rasymas
-jc klaida1
+; jc klaida1
 call space
 cmp bitas_w, 1
 je ww1
@@ -486,10 +671,24 @@ jmp ciklas
 klaida2:
 jmp klaida
 ;------------------------------------
-;pavadinimo isvalymas
+;reg pavertimas desimtainiu
 ;------------------------------------
-; proc op_pav_isvalymas
-
+proc reg_pavertimas_desimtainiu
+	mov di, offset baito_reg
+	mov al, 4
+	mov bh, byte ptr ds:[di]
+	mul bh
+	mov reg_desimtainis, al
+	inc di
+	mov al, 2
+	mov bh, byte ptr ds:[di]
+	mul bh
+	add reg_desimtainis, al
+	inc di
+	mov bh, byte ptr ds:[di]
+	add reg_desimtainis, bh
+	ret
+reg_pavertimas_desimtainiu endp
 ;-------------------------------------
 ;kai d bitas =0, saltinis reg, rezultatas rm
 ;----------------------------------------
@@ -631,7 +830,7 @@ jmp theend
 modtrys:
 cmp bitas_w, 1
 je w1
-jmp reikalinga
+jmp hoho
 w1:
 add nr_lentelej,3
 jmp hoho
@@ -924,6 +1123,41 @@ tikrinuOPK endp
 klaidaa:
 jmp klaida
 
+;-----------------------------------------------------------
+;ip spausdinimas
+;-----------------------------------------------------------
+proc regoutip
+	mov [ip_buff + 0], 30h
+	mov [ip_buff + 1], 31h
+	mov [ip_buff + 2], 30h
+	mov [ip_buff + 3], 30h
+	mov si, 3h
+back2:
+	mov cx, 10h
+	xor dx, dx
+	div cx
+	add dx, 30h
+	mov [ip_buff + si], dl
+	dec si
+	cmp ax, 0h
+	jne back2
+	xor si, si
+	mov cx, 4h
+loopas4:
+	cmp [ip_buff + si], 39h
+	jbe toliau5
+	add [ip_buff + si], 7h
+toliau5:
+	inc si
+	loop loopas4
+	mov dx, offset ip_buff
+	mov cx, 4h
+	call Rasymas
+	mov dx, offset ip_zenklai
+	mov cx, 2h
+	call Rasymas
+	ret
+endp regoutip
 ;-----------------
 ;tarpas
 ;---------------
@@ -966,56 +1200,6 @@ mov komandos_nr, bl
 ret
 kokia_komanda endp
 ;------------------------------------------
-;konvertavimas i bitus
-;-----------------------------------------
-; proc baitas_i_bitus                              ;;;sitoj prceduroj reikia susikelt mod reg rm ir d w
-; xor di,di
-; mov di, 8d
-; valau:
-; cmp di, 9d
-; je isvalyta
-; mov [bitai+di], 0
-; inc di
-; isvalyta:
-; mov bl, 02h
-; mov al, komanda
-; mov di, 08h
-; divloop:
-; xor ah, ah
-; div bl
-; dec di
-; add ah, 30h
-; mov si, offset bitai
-; cmp ax, 0
-; je nulis
-; mov byte ptr ds:[si], '1'
-; buvonulis:
-; cmp al, 0
-; jne divloop
-; cmp di, 0
-; je bye
-; keliunulius:
-; dec di
-; mov si, offset bitai
-; mov byte ptr ds:[si], '0'
-; cmp di, 0
-; jne keliunulius
-; bye:
-; ret
-; endp baitas_i_bitus
-; nulis:
-; mov byte ptr ds:[di], '0'
-; jmp buvonulis
-; mov di, 7d
-; mov si, offset komanda
-; mov ax, byte ptr ds:[si]
-; mov bl, 2h
-; mov si, offset [bitai+di]
-; kelimas:
-; div bl
-; mov byte ptr ds:[si], al
-; mov
-;----------------------
 baito_isvalymas proc
 mov cx, 0008h
 clearloop:
